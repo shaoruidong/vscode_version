@@ -1,0 +1,8 @@
+PyQt5==5.15.11
+requests==2.31.0
+packaging==23.2
+pyyaml==6.0.1
+jsonschema==4.20.0
+appdirs==1.4.4
+psutil==5.9.6
+hypothesis==6.92.0
