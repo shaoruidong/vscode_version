@@ -1,7 +1,10 @@
 # VSCode版本切换工具
 
-一个跨平台的VSCode版本管理工具，支持版本检测、升级降级、下载安装、配置迁移等功能。
-既支持本地源码运行，也支持一键打包成免 Python 环境的 EXE。
+> Cross-platform VSCode version manager & switcher — detect installed versions, download & install new versions, switch / upgrade / downgrade with configs and plugins preserved.
+
+跨平台的 VSCode 版本管理工具：**检测已安装版本、从官方源下载并安装新版本、一键切换 / 升级 / 降级**，全程保留配置和插件。首次下载后本地缓存，之后秒级切换；无需重新下载安装包即可在不同版本之间自由来回。
+
+支持本地源码运行，也支持一键打包成免 Python 环境的 EXE。
 
 ## 最近更新 (2026-08-13)
 
