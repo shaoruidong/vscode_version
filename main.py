@@ -19,7 +19,8 @@ from PyQt5.QtWidgets import (QApplication,QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QLabel, QPushButton, QComboBox,
                              QTextEdit, QProgressBar, QMessageBox, QTabWidget,
                              QTableWidget, QTableWidgetItem, QHeaderView, QGroupBox,
-                             QCheckBox, QPlainTextEdit, QSplitter, QMessageBox, QScrollArea)
+                             QCheckBox, QPlainTextEdit, QSplitter, QMessageBox, QScrollArea,
+                             QListWidget, QListWidgetItem, QAbstractItemView)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QThreadPool, QRunnable
 from PyQt5.QtGui import QFont, QIcon, QPixmap, QPalette, QColor
 import requests
@@ -2405,16 +2406,16 @@ class VSCodeSwitcherGUI(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "错误", f"导出失败: {str(e)}")
     
-    def perform_quick_switch(self, ask_confirm: bool = True):
+    def perform_quick_switch(self, ask_confirm: bool = True, target_version: Optional[str] = None):
         """执行快速切换（使用简单模式+缓存）"""
         try:
-            if not self.version_combo.currentData():
-                QMessageBox.warning(self, "警告", "请选择目标版本")
-                return
+            if target_version is None:
+                if not self.version_combo.currentData():
+                    QMessageBox.warning(self, "警告", "请选择目标版本")
+                    return
+                target_version = self.version_combo.currentData().version
 
-            target_version = self.version_combo.currentData().version
-
-            # 确认对话框（从"切换到选中版本"的未安装分支调用时可跳过，避免重复确认）
+            # 确认对话框（从"切换到选中版本"的未安装分支 / 缓存管理调用时可跳过，避免重复确认）
             if ask_confirm:
                 reply = QMessageBox.question(
                     self,
@@ -2549,30 +2550,42 @@ class VSCodeSwitcherGUI(QMainWindow):
             info_label.setStyleSheet("color: #666; padding: 10px; background: #f5f5f5; border-radius: 5px;")
             layout.addWidget(info_label)
             
-            # 版本列表
+            # 缓存版本列表（可选择，按钮或双击直接快速切换）
+            cache_list = QListWidget()
             if cache_info['versions']:
-                list_label = QLabel("缓存的版本:")
-                list_label.setStyleSheet("font-weight: bold; margin-top: 10px;")
-                layout.addWidget(list_label)
-                
-                versions_text = ""
                 for v in cache_info['versions']:
                     size_mb = v['size'] / (1024 * 1024)
-                    versions_text += f"• 版本 {v['version']} - {size_mb:.1f} MB\n"
-                
-                versions_label = QLabel(versions_text)
-                versions_label.setStyleSheet("padding: 10px; background: #fff; border: 1px solid #ddd; border-radius: 5px;")
-                layout.addWidget(versions_label)
+                    item = QListWidgetItem(f"版本 {v['version']}  ({size_mb:.1f} MB)")
+                    item.setData(Qt.UserRole, v['version'])
+                    cache_list.addItem(item)
+                cache_list.itemDoubleClicked.connect(
+                    lambda item: self._switch_to_cached_version(dialog, cache_list)
+                )
             else:
-                no_cache_label = QLabel("暂无缓存的版本")
-                no_cache_label.setStyleSheet("color: #999; font-style: italic;")
-                layout.addWidget(no_cache_label)
-            
+                cache_list.addItem("暂无缓存的版本")
+                cache_list.setEnabled(False)
+            layout.addWidget(cache_list)
+
             layout.addStretch()
             
             # 按钮
             btn_layout = QHBoxLayout()
-            
+
+            switch_btn = QPushButton("切换到选中版本")
+            switch_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #4CAF50;
+                    color: white;
+                    padding: 8px 15px;
+                    border-radius: 5px;
+                }
+                QPushButton:hover {
+                    background-color: #45a049;
+                }
+            """)
+            switch_btn.clicked.connect(lambda: self._switch_to_cached_version(dialog, cache_list))
+            btn_layout.addWidget(switch_btn)
+
             clear_btn = QPushButton("清空所有缓存")
             clear_btn.setStyleSheet("""
                 QPushButton {
@@ -2626,6 +2639,31 @@ class VSCodeSwitcherGUI(QMainWindow):
             self.simple_switcher.clear_cache()
             QMessageBox.information(self, "成功", "缓存已清空")
             dialog.close()
+
+    def _switch_to_cached_version(self, dialog, cache_list):
+        """从缓存列表选择版本并快速切换（使用已缓存的安装包，无需再次下载）"""
+        item = cache_list.currentItem()
+        if not item:
+            QMessageBox.warning(self, "提示", "请先选择一个缓存的版本")
+            return
+        version = item.data(Qt.UserRole)
+        if not version:
+            QMessageBox.warning(self, "提示", "请先选择一个缓存的版本")
+            return
+        reply = QMessageBox.question(
+            self,
+            "确认切换",
+            f"确定要切换到缓存的版本 {version} 吗？\n\n"
+            f"将使用已缓存的安装包直接切换，无需再次下载\n"
+            f"• 配置和插件自动保留\n"
+            f"• 切换前请关闭VSCode",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+        if reply != QMessageBox.Yes:
+            return
+        dialog.close()
+        self.perform_quick_switch(ask_confirm=False, target_version=version)
 
 # ============================================================================
 # 新增：自动下载和切换功能
