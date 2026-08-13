@@ -1,6 +1,14 @@
 # VSCode版本切换工具
 
-一个跨平台的VSCode版本管理工具，支持版本检测、升级降级、配置迁移等功能。
+一个跨平台的VSCode版本管理工具，支持版本检测、升级降级、下载安装、配置迁移等功能。
+既支持本地源码运行，也支持一键打包成免 Python 环境的 EXE。
+
+## 最近更新 (2026-08-13)
+
+- ✅ **检测增强**：支持 D 盘等任意路径安装的 VSCode —— 注册表 `DisplayIcon` 兜底 + 从 PATH 解析 + 深度受限递归扫描；C/D 盘多版本可同时列出
+- ✅ **切换优化**：目标版本未安装时不再提示"以后才支持下载"，改为询问是否下载，确认后自动下载、缓存并切换
+- ✅ **修复**：GBK 控制台中文输出崩溃；过时的"下载功能将在后续版本提供"提示文案
+- ✅ **打包支持**：加入 `build_config.spec` / `build.bat` / `run.bat` / `.gitignore`，可一键构建 EXE
 
 ## 功能特性
 
@@ -10,13 +18,11 @@
    - 自动检测本地已安装的VSCode版本
    - **无干扰检测**：不会启动VSCode窗口，静默后台检测
    - 支持预定义路径快速检测
-   - **全局搜索功能**：在多个驱动器和常见位置搜索VSCode
-   - **Windows注册表搜索**：从系统注册表查找VSCode安装
-   - **智能版本读取**：直接从package.json文件读取版本号
+   - **全局搜索**：注册表（`DisplayIcon` / `InstallLocation` 双兜底）+ PATH 解析 + 深度受限递归扫描，支持任意盘符和路径（如 `D:\Program Files\VS Code\`）
+   - **智能版本读取**：直接从 `package.json` 文件读取版本号
    - 显示版本号、安装路径、版本类型等详细信息
-   - 支持稳定版和Insiders版
-   - 支持自定义安装路径（如 D:\vs\visual code\vscode\）
-   - **性能优化**：检测速度 < 0.5秒
+   - 支持稳定版和 Insiders 版
+   - **性能优化**：常规检测速度 < 0.5 秒
 
 2. **版本管理**
    - 从VSCode官方API获取最新版本列表
@@ -24,8 +30,10 @@
    - 一键更新版本列表
    - 版本演变图谱可视化
 
-3. **版本切换**
+3. **版本切换（含下载安装）**
    - 在已安装的版本之间快速切换
+   - **未安装的版本**：询问后自动下载安装并切换（快速切换模式）
+   - **智能缓存**：首次下载后缓存，之后秒切
    - 保留用户配置和插件设置
    - 版本切换结果反馈
 
@@ -35,8 +43,8 @@
    - 变更报告生成
 
 5. **用户界面**
-   - 现代化的PyQt5桌面应用
-   - 响应式Web界面（HTML版本）
+   - 现代化的 PyQt5 桌面应用
+   - 响应式 Web 界面（HTML版本）
    - 清晰的操作反馈
 
 ### 核心组件
@@ -46,20 +54,21 @@
 - **CacheManager**: 版本信息缓存管理
 - **VSCodeVersionManager**: 版本管理核心逻辑
 - **ConfigMigrationManager**: 配置迁移管理
+- **SimpleVersionSwitcher**: 快速切换器（下载 + 缓存 + 替换文件）
 
-## 安装和使用
+## 快速开始（本地运行）
 
 ### 环境要求
 
 - Python 3.7+
-- Conda环境（推荐）
-- Windows/macOS/Linux
+- Conda 环境（推荐）
+- Windows / macOS / Linux
 
 ### 安装步骤
 
 1. 克隆或下载项目到本地
 
-2. 创建并激活conda环境：
+2. 创建并激活 conda 环境：
 ```bash
 conda create -n vs python=3.9
 conda activate vs
@@ -70,10 +79,10 @@ conda activate vs
 pip install -r requirements.txt
 ```
 
-### 运行应用
+### 运行应用（本地使用）
 
-#### Windows用户
-双击运行 `run.bat` 文件
+#### Windows 用户
+双击运行 `run.bat`（脚本会自动 `conda activate vs` 并启动 GUI）
 
 #### 命令行运行
 ```bash
@@ -81,20 +90,49 @@ conda activate vs
 python main.py
 ```
 
-#### Web版本
-在浏览器中打开 `index.html` 文件
+#### Web 版本
+在浏览器中直接打开 `index.html` 文件
+
+## 构建成 EXE（Windows）
+
+项目内置 PyInstaller 打包配置，可构建成**免 Python 环境的单文件桌面程序**，直接发给其他用户使用。
+
+### 方法一：一键打包（推荐）
+
+双击运行 `build.bat`，脚本会自动打包并生成：
+
+```
+dist\VSCode版本切换工具.exe
+```
+
+### 方法二：命令行打包
+
+```bash
+conda activate vs
+pip install -r requirements.txt pyinstaller
+python -m PyInstaller build_config.spec --noconfirm --clean
+```
+
+### 验证与说明
+
+- 双击 `dist\VSCode版本切换工具.exe` 启动测试
+- 打包产物是单文件、无控制台窗口
+- 修改 `main.py` / `version_switcher_simple.py` 后，重新执行打包命令即可更新
+- `build_config.spec` 已包含 PyQt5 / requests / yaml / packaging / psutil 等依赖的 `hiddenimports`
+- 打包时自动把 `version_switcher_simple.py` 作为数据文件一并打入
+- 可通过修改 spec 中的 `name` 字段自定义 exe 名称
 
 ## 使用说明
 
 ### 主界面功能
 
 1. **当前版本信息**
-   - 显示当前活动的VSCode版本
+   - 显示当前活动的 VSCode 版本
    - 点击"刷新信息"重新检测
 
 2. **版本选择**
-   - 点击"加载可用版本"从缓存或API获取版本列表
-   - 点击"更新版本列表"强制从官方API获取最新版本
+   - 点击"加载可用版本"从缓存或 API 获取版本列表
+   - 点击"更新版本列表"强制从官方 API 获取最新版本
    - 从下拉框选择目标版本
 
 3. **操作选项**
@@ -103,16 +141,17 @@ python main.py
    - 分析插件兼容性：检查插件兼容性
 
 4. **版本操作**
-   - 升级到选中版本：切换到指定版本
+   - **切换到选中版本**：目标版本已安装时直接切换（修改 PATH）；**未安装时询问是否下载并安装**，确认后自动下载切换
+   - **快速切换（智能缓存）**：始终走"下载 + 缓存 + 替换"流程，首次下载后秒切
    - 回滚到上一个版本：恢复到之前的版本
 
 ### 版本演变图谱
 
 显示：
 - 当前活动版本
-- 推荐版本（比当前版本新的3个版本和旧的2个版本）
+- 推荐版本（比当前版本新的 3 个版本和旧的 2 个版本）
 - 可用版本总数
-- 最近的10个版本
+- 最近的 10 个版本
 
 ### 插件兼容性分析
 
@@ -132,54 +171,49 @@ python main.py
 
 ## 测试
 
-项目包含完整的属性测试套件，使用hypothesis库验证核心功能的正确性。
+仓库包含以下测试脚本（在 `vs` 环境下运行）：
 
-运行测试：
 ```bash
 conda activate vs
-python test_properties.py
+python test_download_speed.py   # 下载速度 / 镜像源测试
+python test_quick_switch.py     # 快速切换流程测试
 ```
-
-测试覆盖的属性：
-- 属性1: 版本检测完整性
-- 属性2: 版本切换一致性
-- 属性5: API数据完整性
-- 属性6: 错误回退一致性
-- 属性7: 版本排序正确性
-- 属性9: 缓存一致性
 
 ## 项目结构
 
 ```
 vscode_version/
-├── main.py                 # 主程序（PyQt5 GUI）
-├── index.html             # Web版本界面
-├── test_properties.py     # 属性测试
-├── requirements.txt       # Python依赖
-├── run.bat               # Windows启动脚本
-├── README.md             # 项目文档
-└── .kiro/specs/          # 规格说明文档
-    └── vscode-version-updater/
-        ├── requirements.md  # 需求文档
-        ├── design.md       # 设计文档
-        └── tasks.md        # 任务列表
+├── main.py                     # 主程序（PyQt5 GUI）
+├── version_switcher_simple.py  # 快速切换器（下载 + 缓存 + 替换文件）
+├── index.html                  # Web 版本界面
+├── build_config.spec           # PyInstaller 打包配置
+├── run.bat                     # Windows 启动脚本
+├── build.bat                   # Windows 一键打包脚本
+├── test_download_speed.py      # 下载速度测试
+├── test_quick_switch.py        # 快速切换测试
+├── requirements.txt            # Python 依赖
+├── README.md                   # 项目文档
+├── .gitignore                  # Git 忽略规则
+└── VSCode版本切换工具.exe       # 已构建的桌面程序（可直接运行）
 ```
 
 ## 技术栈
 
-- **GUI框架**: PyQt5
-- **HTTP请求**: requests
+- **GUI 框架**: PyQt5
+- **HTTP 请求**: requests
 - **版本解析**: packaging
 - **配置管理**: pyyaml, jsonschema
 - **测试框架**: hypothesis
+- **打包工具**: PyInstaller
 - **跨平台支持**: appdirs, psutil
 
 ## 注意事项
 
-1. **网络连接**: 首次使用需要网络连接以获取版本列表
-2. **权限要求**: 某些操作可能需要管理员权限
-3. **备份建议**: 切换版本前建议备份重要数据
-4. **缓存有效期**: 版本列表缓存24小时后自动失效
+1. **网络连接**：首次使用需要网络连接以获取版本列表 / 下载版本
+2. **权限要求**：修改 PATH 环境变量等操作可能需要管理员权限
+3. **备份建议**：切换版本前建议备份重要数据
+4. **缓存有效期**：版本列表缓存 24 小时后自动失效
+5. **下载缓存**：快速切换下载的版本保存在系统缓存目录（appdirs），可在"缓存管理"中查看和清理
 
 ## 开发状态
 
@@ -189,20 +223,19 @@ vscode_version/
 - 本地版本仓库
 - 缓存管理器
 - 版本管理器
-- GUI界面更新
-- 属性测试
+- 快速切换器（下载 + 缓存 + 自动切换）
+- 增强版版本检测（注册表 / PATH / 递归扫描）
+- GUI 界面更新
 
 ### 待实现 🚧
-- VSCode Server管理器
-- 安装管理器（下载和安装新版本）
+- VSCode Server 管理器
 - 配置管理器增强
 - 错误处理机制完善
-- 性能优化
 - 平台兼容性测试
 
 ## 贡献
 
-欢迎提交Issue和Pull Request！
+欢迎提交 Issue 和 Pull Request！
 
 ## 许可证
 
@@ -210,19 +243,27 @@ MIT License
 
 ## 更新日志
 
+### v0.3.0 (2026-08-13) - 检测增强与快速切换优化
+- ✅ 版本检测增强：注册表 `DisplayIcon` 兜底、PATH 解析、深度受限递归扫描，支持 D 盘等任意路径安装
+- ✅ 扫描合并修复：C/D 盘多版本安装可同时列出
+- ✅ 切换优化：目标版本未安装时询问是否下载，确认后走快速切换（下载 + 缓存 + 自动切换）
+- ✅ 修复 GBK 控制台中文输出崩溃
+- ✅ 修正过时的"下载功能将在后续版本提供"提示
+- ✅ 加入完整打包配置（`build_config.spec` / `build.bat` / `run.bat` / `.gitignore`）
+
 ### v0.2.1 (2024-01-21) - 检测增强
 - ✅ 增强版本检测功能
-- ✅ 全局搜索VSCode安装（支持多驱动器）
-- ✅ Windows注册表搜索
-- ✅ 智能版本读取（从package.json）
+- ✅ 全局搜索 VSCode 安装（支持多驱动器）
+- ✅ Windows 注册表搜索
+- ✅ 智能版本读取（从 package.json）
 - ✅ 支持自定义安装路径
 - ✅ 详细的检测日志输出
 
 ### v0.2.0 (2024-01-21)
-- ✅ 实现RemoteVersionRepository
-- ✅ 实现LocalVersionRepository
-- ✅ 实现CacheManager
-- ✅ 增强VSCodeVersionManager
+- ✅ 实现 RemoteVersionRepository
+- ✅ 实现 LocalVersionRepository
+- ✅ 实现 CacheManager
+- ✅ 增强 VSCodeVersionManager
 - ✅ 添加"更新版本列表"功能
 - ✅ 完整的属性测试套件
 
@@ -231,5 +272,5 @@ MIT License
 - ✅ 版本演变图谱
 - ✅ 配置备份
 - ✅ 插件兼容性分析
-- ✅ PyQt5 GUI界面
-- ✅ Web界面
+- ✅ PyQt5 GUI 界面
+- ✅ Web 界面
