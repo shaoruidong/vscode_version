@@ -27,6 +27,13 @@ import yaml
 from packaging import version
 import appdirs
 
+# 强制stdout/stderr使用UTF-8，避免中文输出（如 "✓ 找到VSCode"）在GBK控制台下抛错
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 # 导入简单版本切换器
 from version_switcher_simple import SimpleVersionSwitcher, VersionCache
 
@@ -227,6 +234,16 @@ class VSCodeDetector:
                 r"\Microsoft VS Code\Code.exe",
                 r"\vscode\Microsoft VS Code\Code.exe",
                 r"\VSCode\Code.exe",
+                # 补充常见变体（含带空格的 "VS Code"）
+                r"\Program Files\VS Code\Code.exe",
+                r"\Program Files (x86)\VS Code\Code.exe",
+                r"\VS Code\Code.exe",
+                r"\Software\Microsoft VS Code\Code.exe",
+                r"\Software\VS Code\Code.exe",
+                r"\Tools\Microsoft VS Code\Code.exe",
+                r"\Tools\VS Code\Code.exe",
+                r"\apps\Microsoft VS Code\Code.exe",
+                r"\apps\VS Code\Code.exe",
             ]
             
             print("正在搜索VSCode安装...")
@@ -251,49 +268,22 @@ class VSCodeDetector:
                     edition = "insiders" if "Insiders" in path else "stable"
                     found_installations.append((path, edition))
             
-            # 尝试从注册表查找
-            try:
-                import winreg
-                # 查找VSCode的卸载信息
-                reg_paths = [
-                    (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
-                    (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
-                    (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
-                ]
-                
-                for hkey, reg_path in reg_paths:
-                    try:
-                        key = winreg.OpenKey(hkey, reg_path)
-                        for i in range(winreg.QueryInfoKey(key)[0]):
-                            try:
-                                subkey_name = winreg.EnumKey(key, i)
-                                subkey = winreg.OpenKey(key, subkey_name)
-                                try:
-                                    display_name = winreg.QueryValueEx(subkey, "DisplayName")[0]
-                                    if "Visual Studio Code" in display_name or "Microsoft VS Code" in display_name:
-                                        try:
-                                            install_location = winreg.QueryValueEx(subkey, "InstallLocation")[0]
-                                            code_exe = os.path.join(install_location, "Code.exe")
-                                            if os.path.exists(code_exe):
-                                                edition = "insiders" if "Insiders" in display_name else "stable"
-                                                if (code_exe, edition) not in found_installations:
-                                                    print(f"  从注册表找到: {code_exe}")
-                                                    found_installations.append((code_exe, edition))
-                                        except:
-                                            pass
-                                except:
-                                    pass
-                                finally:
-                                    winreg.CloseKey(subkey)
-                            except:
-                                continue
-                        winreg.CloseKey(key)
-                    except:
+            # 从注册表查找（DisplayIcon 兜底）
+            self._append_unique(found_installations, self._find_vscode_from_registry())
+
+            # 从PATH环境变量查找
+            self._append_unique(found_installations, self._find_vscode_from_path())
+
+            # 以上快方法都没找到时，才做深度受限的递归扫描（兜底）
+            if not found_installations:
+                print("常规方式未找到，开始深度递归扫描...")
+                for drive in drives:
+                    if not os.path.exists(drive):
                         continue
-            except ImportError:
-                pass
-            except Exception as e:
-                print(f"注册表搜索失败: {e}")
+                    recursive = self._search_drive_recursively(drive)
+                    if recursive:
+                        print(f"  递归扫描 {drive} 找到 {len(recursive)} 个VSCode安装")
+                        self._append_unique(found_installations, recursive)
         
         elif self.system == "Darwin":  # macOS
             # macOS应用程序路径
@@ -333,7 +323,166 @@ class VSCodeDetector:
         
         print(f"共找到 {len(found_installations)} 个VSCode安装")
         return found_installations
-    
+
+    def _append_unique(self, target: List[Tuple[str, str]], items: List[Tuple[str, str]]):
+        """去重追加到结果列表"""
+        existing = set(target)
+        for item in items:
+            if item not in existing:
+                print(f"  找到: {item[0]}")
+                target.append(item)
+                existing.add(item)
+
+    def _find_vscode_from_registry(self) -> List[Tuple[str, str]]:
+        """
+        从Windows注册表查找VSCode安装
+
+        优先使用DisplayIcon（通常是完整exe路径，形如 "xxx\\Code.exe,0"），
+        缺失时退回InstallLocation。
+
+        Returns:
+            [(路径, 版本类型), ...] 列表
+        """
+        found = []
+        try:
+            import winreg
+        except ImportError:
+            return found
+
+        reg_paths = [
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+            (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+        ]
+
+        def _is_vscode(name: str) -> bool:
+            return "Visual Studio Code" in name or "Microsoft VS Code" in name
+
+        for hkey, reg_path in reg_paths:
+            try:
+                key = winreg.OpenKey(hkey, reg_path)
+            except OSError:
+                continue
+            try:
+                for i in range(winreg.QueryInfoKey(key)[0]):
+                    try:
+                        subkey_name = winreg.EnumKey(key, i)
+                        subkey = winreg.OpenKey(key, subkey_name)
+                    except OSError:
+                        continue
+                    try:
+                        # 读取显示名称，识别VSCode
+                        display_name = ""
+                        try:
+                            display_name = winreg.QueryValueEx(subkey, "DisplayName")[0]
+                        except OSError:
+                            pass
+                        if not display_name or not _is_vscode(display_name):
+                            continue
+
+                        code_exe = None
+                        # 优先用DisplayIcon（去掉 ",0" 等资源号后缀）
+                        try:
+                            icon = winreg.QueryValueEx(subkey, "DisplayIcon")[0]
+                            if icon:
+                                candidate = icon.split(",")[0].strip()
+                                if candidate.lower().endswith(".exe") and os.path.exists(candidate):
+                                    code_exe = candidate
+                        except OSError:
+                            pass
+
+                        # DisplayIcon 拿不到时退回 InstallLocation
+                        if not code_exe:
+                            try:
+                                loc = winreg.QueryValueEx(subkey, "InstallLocation")[0]
+                                if loc:
+                                    candidate = os.path.join(loc, "Code.exe")
+                                    if os.path.exists(candidate):
+                                        code_exe = candidate
+                            except OSError:
+                                pass
+
+                        if code_exe:
+                            edition = "insiders" if "Insiders" in display_name else "stable"
+                            found.append((code_exe, edition))
+                    finally:
+                        winreg.CloseKey(subkey)
+            finally:
+                winreg.CloseKey(key)
+        return found
+
+    def _find_vscode_from_path(self) -> List[Tuple[str, str]]:
+        """
+        从PATH环境变量查找VSCode
+
+        若PATH里有 code / Code.exe（常见为 <安装目录>\\bin\\code.cmd），
+        推导出安装目录里的Code.exe。
+
+        Returns:
+            [(路径, 版本类型), ...] 列表
+        """
+        found = []
+        for cmd in ("code", "Code.exe", "code.cmd", "Code"):
+            p = shutil.which(cmd)
+            if not p:
+                continue
+            norm = p.lower().replace("/", "\\")
+            if norm.endswith("\\bin\\code.cmd") or norm.endswith("\\bin\\code"):
+                # PATH 入口在 bin 下，Code.exe 在上级目录
+                code_exe = os.path.join(os.path.dirname(os.path.dirname(p)), "Code.exe")
+            elif norm.endswith("code.exe"):
+                code_exe = p
+            else:
+                code_exe = None
+
+            if code_exe and os.path.exists(code_exe):
+                edition = "insiders" if "insiders" in norm else "stable"
+                found.append((code_exe, edition))
+        return found
+
+    def _search_drive_recursively(self, drive: str, max_depth: int = 4) -> List[Tuple[str, str]]:
+        """
+        深度受限的递归搜索Code.exe（兜底方案，仅在快方法未找到时调用）
+
+        Args:
+            drive: 盘符，如 "C:"
+            max_depth: 最大目录深度（相对盘符根目录）
+
+        Returns:
+            [(路径, 版本类型), ...] 列表
+        """
+        found = []
+        # 剪枝目录：不进入这些目录，避免扫描系统目录/依赖目录
+        prune_dirs = {
+            "windows", "winsxs", "$recycle.bin", "system volume information",
+            "node_modules", ".git", "__pycache__", "programdata", "temp",
+        }
+        max_found = 10  # 单个盘最多收集的安装数，防止极端情况拖慢
+
+        def _onerror(e: OSError):
+            # 权限不足等错误直接忽略，继续扫描
+            pass
+
+        base_depth = drive.rstrip("\\/").count("\\")
+        for root, dirs, files in os.walk(drive, topdown=True, followlinks=False, onerror=_onerror):
+            depth = root.rstrip("\\/").count("\\") - base_depth
+            # 剪枝 + 深度限制
+            dirs[:] = [d for d in dirs if d.lower() not in prune_dirs]
+            if depth >= max_depth:
+                dirs[:] = []
+
+            for fname in files:
+                if fname.lower() in ("code.exe", "code - insiders.exe"):
+                    path = os.path.join(root, fname)
+                    edition = "insiders" if "insiders" in fname.lower() else "stable"
+                    found.append((path, edition))
+                    if len(found) >= max_found:
+                        break
+            if len(found) >= max_found:
+                break
+
+        return found
+
     def detect_current_version(self) -> Tuple[Optional[str], Optional[str]]:
         """检测当前VSCode版本（不启动VSCode）"""
         # 首先尝试预定义路径
@@ -669,20 +818,17 @@ class LocalVersionRepository:
                 except Exception as e:
                     print(f"扫描安装失败 {path}: {e}")
         
-        # 2. 如果预定义路径没找到，进行全局搜索
-        if not installations:
-            print("预定义路径未找到安装，开始全局搜索...")
-            global_installations = self.detector.search_vscode_globally()
-            
-            for path, edition in global_installations:
-                if path not in found_paths:
-                    try:
-                        installation = self._create_installation_from_path(path, edition)
-                        if installation:
-                            installations.append(installation)
-                            found_paths.add(path)
-                    except Exception as e:
-                        print(f"扫描安装失败 {path}: {e}")
+        # 2. 全局搜索，合并结果（无论预定义路径是否找到，按路径去重）
+        global_installations = self.detector.search_vscode_globally()
+        for path, edition in global_installations:
+            if path not in found_paths:
+                try:
+                    installation = self._create_installation_from_path(path, edition)
+                    if installation:
+                        installations.append(installation)
+                        found_paths.add(path)
+                except Exception as e:
+                    print(f"扫描安装失败 {path}: {e}")
         
         self.installations_cache = installations
         print(f"共扫描到 {len(installations)} 个VSCode安装")
