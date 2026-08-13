@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VSCode版本切换工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .status-online { color: #10b981; }
+        .status-offline { color: #ef4444; }
+        .version-stable { background-color: #10b981; }
+        .version-insiders { background-color: #f59e0b; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- 头部 -->
+    <header class="gradient-bg text-white shadow-lg">
+        <div class="container mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <i class="fab fa-microsoft text-3xl"></i>
+                    <div>
+                        <h1 class="text-2xl font-bold">VSCode版本切换工具</h1>
+                        <p class="text-blue-100">跨平台版本管理与配置迁移</p>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <div class="text-sm text-blue-100">系统状态</div>
+                    <div id="systemStatus" class="flex items-center space-x-2">
+                        <span class="status-online">●</span>
+                        <span>运行正常</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主要内容 -->
+    <div class="container mx-auto px-6 py-8">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- 左侧控制面板 -->
+            <div class="lg:col-span-1 space-y-6">
+                
+                <!-- 当前版本信息 -->
+                <div class="glass-card rounded-xl p-6 shadow-lg">
+                    <h2 class="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                        <i class="fas fa-info-circle text-blue-500 mr-2"></i>
+                        当前版本信息
+                    </h2>
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-600">检测状态:</span>
+                            <span id="detectStatus" class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
+                                检测中...
+                            </span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-600">版本号:</span>
+                            <span id="currentVersion" class="font-mono text-sm bg-gray-100 px-2 py-1 rounded">--</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-600">版本类型:</span>
+                            <span id="currentEdition" class="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">--</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-600">安装路径:</span>
+                            <span id="installPath" class="text-sm text-gray-500 truncate">--</span>
+                        </div>
+                    </div>
+                    <button onclick="detectCurrentVersion()" class="w-full mt-4 bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center justify-center">
+<i class="fas fa-sync-alt mr-2"></i>重新检测
+                    </button>
+                </div>
+
+                <!-- 版本选择 -->
+                <div class="glass-card rounded-xl p-6 shadow-lg">
+                    <h2 class="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                        <i class="fas fa-code-branch text-green-500 mr-2"></i>
+                        版本选择
+                    </h2>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">目标版本</label>
+                            <select id="targetVersion" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                <option value="">请先加载可用版本</option>
+                            </select>
+                        </div>
+                        <button onclick="loadAvailableVersions()" class="w-full bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center justify-center">
+                            <i class="fas fa-download mr-2"></i>加载可用版本
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 操作选项 -->
+                <div class="glass-card rounded-xl p-6 shadow-lg">
+                    <h2 class="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                        <i class="fas fa-cog text-purple-500 mr-2"></i>
+                        操作选项
+                    </h2>
+                    <div class="space-y-3">
+                        <label class="flex items-center">
+                            <input type="checkbox" id="backupConfig" checked class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
+                            <span class="ml-2 text-sm text-gray-700">备份当前配置</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" id="migrateConfig" checked class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
+                            <span class="ml-2 text-sm text-gray-700">迁移配置和插件</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" id="analyzeCompat" checked class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
+                            <span class="ml-2 text-sm text-gray-700">分析插件兼容性</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 操作按钮 -->
+                <div class="space-y-3">
+                    <button onclick="performUpgrade()" class="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold py-3 px-4 rounded-lg transition duration-200 transform hover:scale-105 flex items-center justify-center">
+                        <i class="fas fa-arrow-up mr-2"></i>执行升级
+                    </button>
+                    <button onclick="performRollback()" class="w-full bg-gradient-to-r from-red-500 to-pink-600 hover:from-red-600 hover:to-pink-700 text-white font-bold py-3 px-4 rounded-lg transition duration-200 transform hover:scale-105 flex items-center justify-center">
+                        <i class="fas fa-undo mr-2"></i>回滚操作
+                    </button>
+                </div>
+            </div>
+
+            <!-- 右侧信息显示 -->
+            <div class="lg:col-span-2 space-y-6">
+                
+                <!-- 版本演变图谱 -->
+                <div class="glass-card rounded-xl p-6 shadow-lg">
+                    <h2 class="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                        <i class="fas fa-project-diagram text-indigo-500 mr-2"></i>
+                        版本演变图谱
+                    </h2>
+                    <div id="versionTree" class="bg-gray-50 rounded-lg p-4 min-h-[200px]">
+                        <div class="text-center text-gray-500 py-8">
+                            <i class="fas fa-chart-line text-4xl mb-2"></i>
+                            <p>点击"加载可用版本"查看版本演变图谱</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 插件兼容性分析 -->
+                <div class="glass-card rounded-xl p-6 shadow-lg">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-semibold text-gray-800 flex items-center">
+                            <i class="fas fa-plug text-orange-500 mr-2"></i>
+                            插件兼容性分析
+                        </h2>
+                        <button onclick="analyzeCompatibility()" class="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center">
+                            <i class="fas fa-search mr-2"></i>分析兼容性
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">插件名称</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">说明</th>
+                                </tr>
+                            </thead>
+                            <tbody id="compatibilityTable" class="bg-white divide-y divide-gray-200">
+                                <tr>
+                                    <td colspan="3" class="px-6 py-4 text-center text-gray-500">暂无数据，请先分析插件兼容性</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 变更报告 -->
+                <div class="glass-card rounded-xl p-6 shadow-lg">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-semibold text-gray-800 flex items-center">
+                            <i class="fas fa-file-alt text-teal-500 mr-2"></i>
+                            变更报告
+                        </h2>
+                        <button onclick="exportReport()" class="bg-teal-500 hover:bg-teal-600 text-white font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center">
+                            <i class="fas fa-download mr-2"></i>导出报告
+                        </button>
+                    </div>
+                    <div id="changeReport" class="bg-gray-50 rounded-lg p-4 min-h-[200px] font-mono text-sm">
+                        <div class="text-center text-gray-500 py-8">
+                            <i class="fas fa-file-alt text-4xl mb-2"></i>
+                            <p>变更报告将在此显示</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 页脚 -->
+    <footer class="bg-gray-800 text-white py-6 mt-12">
+        <div class="container mx-auto px-6 text-center">
+            <p>© 2024 VSCode版本切换工具 - 跨平台版本管理解决方案</p>
+        </div>
+ dawn>
+    </footer>
+
+    <script>
+        // 全局状态
+        let currentState = {
+            detected: false,
+            currentVersion: null,
+            currentEdition: null,
+            availableVersions: [],
+            compatibilityData: [],
+            reportData: {}
+        };
+
+        // 检测当前版本
+        async function detectCurrentVersion() {
+            const statusEl = document.getElementById('detectStatus');
+            const versionEl = document.getElementById('currentVersion');
+            const editionEl = document.getElementById('currentEdition');
+            const pathEl = document.getElementById('installPath');
+
+            statusEl.textContent = '检测中...';
+            statusEl.className = 'px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm';
+
+            try {
+                // 模拟检测过程
+                await new Promise(resolve => setTimeout(resolve, 1500));
+
+                // 模拟检测结果
+                const mockData = {
+                    detected: true,
+                    version: "1.85.2",
+                    edition: "stable",
+                    path: "/usr/share/code/code"
+                };
+
+                if (mockData.detected) {
+                    currentState.detected = true;
+                    currentState.currentVersion = mockData.version;
+                    currentState.currentEdition = mockData.edition;
+
+                    statusEl.textContent = '已检测';
+                    statusEl.className = 'px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm';
+                    
+                    versionEl.textContent = mockData.version;
+                    editionEl.textContent = mockData.edition === 'stable' ? '稳定版' : '内测版';
+                    editionEl.className = mockData.edition === 'stable' ? 
+                        'px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm' : 
+                        'px-2 py-1 bg-orange-100 text-orange-800 rounded-full text-sm';
+                    pathEl.textContent = mockData.path;
+
+                    // 更新系统状态
+                    document.getElementById('systemStatus').innerHTML = `
+                        <span class="status-online">●</span>
+                        <span>VSCode已安装</span>
+                    `;
+                } else {
+                    statusEl.textContent = '未检测';
+                    statusEl.className = 'px-2 py-1 bg-red-100 text-red-800 rounded-full text-sm';
+                }
+            } catch (error) {
+                statusEl.textContent = '检测失败';
+                statusEl.className = 'px-2 py-1 bg-red-100 text-red-800 rounded-full text-sm';
+            }
+        }
+
+        // 加载可用版本
+        async function loadAvailableVersions() {
+            const btn = event.target;
+            const originalText = btn.innerHTML;
+            
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>加载中...';
+            btn.disabled = true;
+
+            try {
+                // 模拟加载过程
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                // 模拟版本数据
+                const mockVersions = [
+                    { version: "1.86.0", date: "2024-01-15", type: "stable" },
+                    { version: "1.85.2", date: "2024-01-08", type: "stable" },
+                    { version: "1.85.1", date: "2023-12-25", type: "stable" },
+                    { version: "1.85.0", date: "2023-12-15", type: "stable" },
+                    { version: "1.84.2", date: "2023-11-30", type: "stable" },
+                    { version: "1.84.1", date: "2023-11-20", type: "stable" },
+                    { version: "1.84.0", date: "2023-11-10", type: "stable" }
+                ];
+
+                currentState.availableVersions = mockVersions;
+
+                // 更新版本选择下拉框
+                const select = document.getElementById('targetVersion');
+                select.innerHTML = '<option value="">请选择目标版本</option>';
+                mockVersions.forEach(v => {
+                    const option = document.createElement('option');
+                    option.value = v.version;
+                    option.textContent = `${v.version} (${v.date})`;
+                    select.appendChild(option);
+                });
+
+                // 更新版本演变图谱
+                updateVersionTree(mockVersions);
+
+            } catch (error) {
+                alert('加载可用版本失败');
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        // 更新版本演变图谱
+        function updateVersionTree(versions) {
+            const treeEl = document.getElementById('versionTree');
+            
+            let html = `
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
+                        <div>
+                            <div class="font-semibold text-blue-800">当前版本</div>
+                            <div class="text-sm text-blue-600">${currentState.currentVersion || '未知'}</div>
+                        </div>
+                        <div class="text-blue-500">
+                            <i class="fas fa-map-marker-alt text-2xl"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="space-y-2">
+                        <div class="font-semibold text-gray-700 mb-2">可用版本:</div>
+            `;
+
+            versions.slice(0, 5).forEach((v, index) => {
+                const isCurrent = v.version === currentState.currentVersion;
+                const isNewer = v.version > currentState.currentVersion;
+                
+                html += `
+                    <div class="flex items-center space-x-3 p-3 ${isCurrent ? 'bg-green-100 border-2 border-green-300' : 'bg-white border border-gray-200'} rounded-lg">
+                        <div class="flex-shrink-0">
+                            ${isCurrent ? 
+                                '<i class="fas fa-dot-circle text-green-500"></i>' : 
+                                (isNewer ? '<i class="fas fa-arrow-up text-blue-500"></i>' : '<i class="fas fa-arrow-down text-gray-400"></i>')
+                            }
+                        </div>
+                        <div class="flex-1">
+                            <div class="font-medium ${isCurrent ? 'text-green-800' : 'text-gray-800'}">${v.version}</div>
+                            <div class="text-sm text-gray-500">${v.date}</div>
+                        </div>
+                        <div class="text-sm">
+                            ${v.type === 'stable' ? 
+                                '<span class="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">稳定版</span>' : 
+                                '<span class="px-2 py-1 bg-orange-100 text-orange-800 rounded-full text-xs">内测版</span>'
+                            }
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `
+                    </div>
+                </div>
+            `;
+
+            treeEl.innerHTML = html;
+        }
+
+        // 分析插件兼容性
+        async function analyzeCompatibility() {
+            const targetVersion = document.getElementById('targetVersion').value;
+            if (!targetVersion) {
+                alert('请先选择目标版本');
+                return;
+            }
+
+            const btn = event.target;
+            const originalText = btn.innerHTML;
+            
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>分析中...';
+            btn.disabled = true;
+
+            try {
+                // 模拟分析过程
+                await new Promise(resolve => setTimeout(resolve, 3000));
+
+                // 模拟兼容性数据
+                const mockCompatData = [
+                    { name: "Python", status: "compatible", reason: "完全兼容" },
+                    { name: "JavaScript (ES6) code snippets", status: "compatible", reason: "完全兼容" },
+                    { name: "Prettier - Code formatter", status: "compatible", reason: "完全兼容" },
+                    { name: "ESLint", status: "unknown", reason: "需要验证" },
+                    { name: "GitLens", status: "incompatible", reason: "目标版本不支持" },
+                    { name: "Live Server", status: "compatible", reason: "完全兼容" },
+                    { name: "Bracket Pair Colorizer", status: "unknown", reason: "需要验证" },
+                    { name: "Auto Rename Tag", status: "compatible", reason: "完全兼容" }
+                ];
+
+                currentState.compatibilityData = mockCompatData;
+
+                // 更新兼容性表格
+                updateCompatibilityTable(mockCompatData);
+
+            } catch (error) {
+                alert('分析插件兼容性失败');
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        // 更新兼容性表格
+        function updateCompatibilityTable(data) {
+            const tbody = document.getElementById('compatibilityTable');
+            
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="px-6 py-4 text-center text-gray-500">暂无数据</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = '';
+            
+            data.forEach(item => {
+                const row = document.createElement('tr');
+                
+                let statusBadge, statusText;
+                switch(item.status) {
+                    case 'compatible':
+                        statusBadge = 'bg-green-100 text-green-800';
+                        statusText = '兼容';
+                        break;
+                    case 'incompatible':
+                        statusBadge = 'bg-red-100 text-red-800';
+                        statusText = '不兼容';
+                        break;
+                    default:
+                        statusBadge = 'bg-yellow-100 text-yellow-800';
+                        statusText = '未知';
+                }
+
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${item.name}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusBadge}">
+                            ${statusText}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.reason}</td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+        }
+
+        // 执行升级
+        async function performUpgrade() {
+            const targetVersion = document.getElementById('targetVersion').value;
+            if (!targetVersion) {
+                alert('请先选择目标版本');
+                return;
+            }
+
+            if (!confirm(`确定要升级到版本 ${targetVersion} 吗？\n此操作将需要一些时间。`)) {
+                return;
+            }
+
+            try {
+                // 模拟升级过程
+                await simulateUpgradeProcess(targetVersion);
+            } catch (error) {
+                alert('升级失败: ' + error.message);
+            }
+        }
+
+        // 模拟升级过程
+        async function simulateUpgradeProcess(targetVersion) {
+            const reportEl = document.getElementById('changeReport');
+            
+            // 生成模拟报告
+            const report = {
+                timestamp: new Date().toISOString(),
+                operation: "升级",
+                from_version: currentState.currentVersion,
+                to_version: targetVersion,
+                backup_path: `/tmp/vscode_backup_${Date.now()}`,
+                compatibility: {
+                    total: currentState.compatibilityData.length,
+                    compatible: currentState.compatibilityData.filter(x => x.status === 'compatible').length,
+                    incompatible: currentState.compatibilityData.filter(x => x.status === 'incompatible').length,
+                    unknown: currentState.compatibilityData.filter(x => x.status === 'unknown').length
+                },
+                warnings: [
+                    "GitLens插件可能在新版本中出现问题",
+                    "建议升级后重新配置部分设置"
+                ],
+                recommendations: [
+                    "升级前请确保已保存所有工作",
+                    "建议在升级后重启VSCode",
+                    "如有问题可使用回滚功能恢复"
+                ]
+            };
+
+            // 显示报告
+            displayChangeReport(report);
+            
+            // 更新状态
+            currentState.currentVersion = targetVersion;
+            detectCurrentVersion();
+        }
+
+        // 显示变更报告
+        function displayChangeReport(report) {
+            const reportEl = document.getElementById('changeReport');
+            
+            let html = `
+                <div class="space-y-4">
+                    <div class="text-center">
+                        <h3 class="text-lg font-semibold text-gray-800">VSCode版本切换变更报告</h3>
+                        <div class="text-sm text-gray-600 mt-1">${new Date(report.timestamp).toLocaleString()}</div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4 bg-blue-50 p-4 rounded-lg">
+                        <div>
+                            <div class="text-sm font-medium text-blue-800">操作类型</div>
+                            <div class="text-blue-600">${report.operation}</div>
+                        </div>
+                        <div>
+                            <div class="text-sm font-medium text-blue-800">备份路径</div>
+                            <div class="text-blue-600 text-sm truncate">${report.backup_path}</div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-gray-50 p-3 rounded-lg">
+                            <div class="text-sm font-medium text-gray-800">源版本</div>
+                            <div class="font-mono text-lg">${report.from_version}</div>
+                        </div>
+                        <div class="bg-gray-50 p-3 rounded-lg">
+                            <div class="text-sm font-medium text-gray-800">目标版本</div>
+                            <div class="font-mono text-lg">${report.to_version}</div>
+                        </div>
+                    </div>
+            `;
+
+            if (report.compatibility) {
+                html += `
+                    <div class="bg-yellow-50 p-4 rounded-lg">
+                        <h4 class="font-medium text-yellow-800 mb-2">插件兼容性分析</h4>
+                        <div class="grid grid-cols-3 gap-2 text-sm">
+                            <div class="text-center">
+                                <div class="text-green-600 font-bold">${report.compatibility.compatible}</div>
+                                <div class="text-gray-600">兼容</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-red-600 font-bold">${report.compatibility.incompatible}</div>
+                                <div class="text-gray-600">不⽤</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-yellow-600 font-bold">${report.compatibility.unknown}</div>
+                                <div class="text-gray-600">未知</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (report.warnings && report.warnings.length > 0) {
+                html += `
+                    <div class="bg-orange-50 p-4 rounded-lg">
+                        <h4 class="font-medium text-orange-800 mb-2">⚠️ 警告信息</h4>
+                        <ul class="text-sm text-orange-700 space-y-1">
+                            ${report.warnings.map(w => `<li>• ${w}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+
+            if (report.recommendations && report.recommendations.length > 0) {
+                html += `
+                    <div class="bg-green-50 p-4 rounded-lg">
+                        <h4 class="font-medium text-green-800 mb-2">💡 建议</h4>
+                        <ul class="text-sm text-green-700 space-y-1">
+                            ${report.recommendations.map(r => `<li>• ${r}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+
+            html += `</div>`;
+            reportEl.innerHTML = html;
+        }
+
+        // 执行回滚
+        function performRollback() {
+            if (confirm('确定要回滚到上一个版本吗？')) {
+                alert('回滚功能将在后续版本中实现。\n目前请手动使用备份的配置文件进行恢复。');
+            }
+        }
+
+        // 导出报告
+        function exportReport() {
+            const reportContent = document.getElementById('changeReport').innerText;
+            if (!reportContent || reportContent.includes('变更报告将在此显示')) {
+                alert('没有可导出的报告内容');
+                return;
+            }
+
+            const blob = new Blob([reportContent], { type: 'text/plain;charset=utf-8' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `vscode_switch_report_${new Date().toISOString().slice(0, 10)}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            detectCurrentVersion();
+        });
+    </script>
+</body>
+</html>

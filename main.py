@@ -2162,13 +2162,19 @@ class VSCodeSwitcherGUI(QMainWindow):
                     break
             
             if not target_installation:
-                QMessageBox.warning(
+                # 版本未安装：提示并走快速切换（下载+安装）逻辑
+                reply = QMessageBox.question(
                     self,
                     "版本未安装",
                     f"版本 {target_version} 尚未安装在本地。\n\n"
-                    f"当前只能切换到已安装的版本。\n"
-                    f"版本下载和安装功能将在后续版本中提供。"
+                    f"是否立即下载并安装该版本？\n\n"
+                    f"• 下载后自动切换，配置和插件自动保留\n"
+                    f"• 首次下载后版本会缓存，之后可秒切",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.Yes
                 )
+                if reply == QMessageBox.Yes:
+                    self.perform_quick_switch(ask_confirm=False)
                 return
             
             # 确认对话框
@@ -2399,30 +2405,31 @@ class VSCodeSwitcherGUI(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "错误", f"导出失败: {str(e)}")
     
-    def perform_quick_switch(self):
+    def perform_quick_switch(self, ask_confirm: bool = True):
         """执行快速切换（使用简单模式+缓存）"""
         try:
             if not self.version_combo.currentData():
                 QMessageBox.warning(self, "警告", "请选择目标版本")
                 return
-            
+
             target_version = self.version_combo.currentData().version
-            
-            # 确认对话框
-            reply = QMessageBox.question(
-                self,
-                "确认快速切换",
-                f"确定要切换到版本 {target_version} 吗？\n\n"
-                f"快速切换功能：\n"
-                f"• 第一次下载后会缓存，之后秒切\n"
-                f"• 配置和插件自动保留\n"
-                f"• 切换前请关闭VSCode\n\n"
-                f"是否继续？",
-                QMessageBox.Yes | QMessageBox.No
-            )
-            
-            if reply != QMessageBox.Yes:
-                return
+
+            # 确认对话框（从"切换到选中版本"的未安装分支调用时可跳过，避免重复确认）
+            if ask_confirm:
+                reply = QMessageBox.question(
+                    self,
+                    "确认快速切换",
+                    f"确定要切换到版本 {target_version} 吗？\n\n"
+                    f"快速切换功能：\n"
+                    f"• 第一次下载后会缓存，之后秒切\n"
+                    f"• 配置和插件自动保留\n"
+                    f"• 切换前请关闭VSCode\n\n"
+                    f"是否继续？",
+                    QMessageBox.Yes | QMessageBox.No
+                )
+
+                if reply != QMessageBox.Yes:
+                    return
             
             # 创建进度对话框
             progress_dialog = QWidget(self)
